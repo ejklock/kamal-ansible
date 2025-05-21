@@ -35,30 +35,6 @@
     state: present
   notify: restart docker
 
-- name: Install Docker Compose plugin
-  get_url:
-    url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-{{ architecture }}"
-    dest: /usr/local/bin/docker-compose
-    mode: "0755"
-  register: docker_compose_download
-  ignore_errors: yes
-
-- name: Install Docker Compose (fallback for ARM)
-  get_url:
-    url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-{{ architecture | regex_replace('arm.*', 'aarch64') }}"
-    dest: /usr/local/bin/docker-compose
-    mode: "0755"
-  when:
-    - docker_compose_download is failed
-    - architecture is match("arm.*")
-
-- name: Create docker-compose symbolic link
-  file:
-    src: /usr/local/bin/docker-compose
-    dest: /usr/bin/docker-compose
-    state: link
-    force: yes
-
 - name: Configure Docker daemon
   template:
     src: daemon.json.j2

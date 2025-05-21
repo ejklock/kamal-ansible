@@ -1,7 +1,5 @@
 [kamal_servers]
-# Example servers - replace with your actual servers
-app-server-1 ansible_host=1.2.3.4 ansible_user=ubuntu
-app-server-2 ansible_host=5.6.7.8 ansible_user=ubuntu
+dev-server ansible_host=10.211.55.3 ansible_user=ejklock ansible_ssh_private_key_file=~/.ssh/kamal_deploy_key
 
 [kamal_servers:vars]
 ansible_python_interpreter=/usr/bin/python3

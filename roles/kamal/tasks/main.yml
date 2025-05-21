@@ -36,14 +36,6 @@
     mode: "0755"
   when: deploy_user != "root"
 
-# Python dependencies for Kamal (used for Docker API)
-- name: Install Python dependencies for Kamal
-  pip:
-    name:
-      - docker
-      - pyOpenSSL
-    state: present
-
 # System tuning for optimal container performance
 - name: Set kernel parameters for optimal Docker performance
   sysctl:
