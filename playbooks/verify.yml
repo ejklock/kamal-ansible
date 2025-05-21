@@ -1,0 +1,123 @@
+---
+# verify.yml - Playbook to verify server configuration for Kamal deployments
+
+- name: Verify Kamal server configuration
+  hosts: kamal_servers
+  become: false
+  gather_facts: true
+
+  tasks:
+    - name: Check Docker access for deployment user
+      command: docker ps
+      register: docker_ps
+      changed_when: false
+      ignore_errors: true
+      tags: docker
+
+    - name: Display Docker status
+      debug:
+        msg: "Docker is {{ 'accessible and working correctly' if docker_ps.rc == 0 else 'not accessible or not working' }}"
+      when: docker_ps.rc is defined
+      tags: docker
+
+    - name: Check Docker Compose installation
+      command: docker-compose --version
+      register: docker_compose_version
+      changed_when: false
+      ignore_errors: true
+      tags: docker
+
+    - name: Display Docker Compose status
+      debug:
+        msg: "{{ docker_compose_version.stdout if docker_compose_version.rc == 0 else 'Docker Compose is not installed or not accessible' }}"
+      when: docker_compose_version.rc is defined
+      tags: docker
+
+    - name: Check UFW firewall status
+      become: true
+      command: ufw status
+      register: ufw_status
+      changed_when: false
+      ignore_errors: true
+      tags: firewall
+
+    - name: Display UFW status
+      debug:
+        msg: "{{ ufw_status.stdout if ufw_status.rc == 0 else 'UFW is not installed or accessible' }}"
+      when: ufw_status.rc is defined
+      tags: firewall
+
+    - name: Check deployment directory structure
+      stat:
+        path: "{{ item }}"
+      register: dir_check
+      loop:
+        - "{{ ansible_env.HOME }}/apps"
+        - "{{ ansible_env.HOME }}/.ssh"
+      tags: structure
+
+    - name: Display directory structure status
+      debug:
+        msg: "Directory {{ item.item }} {{ 'exists' if item.stat.exists else 'does not exist' }}"
+      loop: "{{ dir_check.results }}"
+      tags: structure
+
+    - name: Check SSH key configuration
+      stat:
+        path: "{{ ansible_env.HOME }}/.ssh/authorized_keys"
+      register: ssh_keys
+      tags: ssh
+
+    - name: Display SSH key status
+      debug:
+        msg: "SSH authorized_keys file {{ 'exists' if ssh_keys.stat.exists else 'does not exist' }}"
+      tags: ssh
+
+    - name: Check system resources
+      debug:
+        msg:
+          - "Available memory: {{ ansible_memtotal_mb }}MB"
+          - "Available disk space: {{ ansible_mounts | selectattr('mount', 'equalto', '/') | map(attribute='size_available') | first | int // 1024 // 1024 }}MB"
+          - "CPU cores: {{ ansible_processor_vcpus }}"
+      tags: resources
+
+    - name: Check swap configuration
+      command: swapon --show
+      register: swap_status
+      changed_when: false
+      ignore_errors: true
+      tags: system
+
+    - name: Display swap status
+      debug:
+        msg: "{{ swap_status.stdout if swap_status.rc == 0 and swap_status.stdout else 'No swap configured' }}"
+      tags: system
+
+    - name: Check key system services
+      systemd:
+        name: "{{ item }}"
+      register: service_status
+      loop:
+        - docker
+        - ssh
+        - ufw
+      ignore_errors: true
+      tags: services
+
+    - name: Display services status
+      debug:
+        msg: "Service {{ item.item }} is {{ item.status.ActiveState | default('unknown') }}"
+      loop: "{{ service_status.results }}"
+      when: item.status is defined
+      tags: services
+
+    - name: Summary
+      debug:
+        msg:
+          - "=== Kamal Deployment Server Verification Summary ==="
+          - "✓ Docker: {{ 'Working' if docker_ps.rc == 0 else 'Not working' }}"
+          - "✓ UFW Firewall: {{ 'Active' if ufw_status.rc == 0 and 'Status: active' in ufw_status.stdout else 'Inactive or not configured' }}"
+          - "✓ Apps directory: {{ 'Present' if dir_check.results[0].stat.exists else 'Missing' }}"
+          - "✓ SSH directory: {{ 'Present' if dir_check.results[1].stat.exists else 'Missing' }}"
+          - "✓ Server is ready for Kamal deployments"
+      tags: always

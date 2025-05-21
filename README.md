@@ -1,134 +1,212 @@
-# Ansible Playbook for Kamal 2 Server
+# Ansible Playbook for Kamal 2 Server Setup
 
-This project contains an Ansible playbook to configure an Ubuntu server as a deployment environment for Kamal 2.
+This project contains a comprehensive Ansible setup to configure Ubuntu servers for deployment with Kamal 2.
 
 ## Project Structure
 
 ```
-kamal-ansible/
-├── kamal_server_setup.yml    # Main playbook
-├── inventory.yml             # YAML format inventory file (alternative)
-└── ssh_keys/                 # Directory to store SSH keys (create manually)
-    └── deploy_key.pub        # Public key for deployment (optional)
+ansible/
+├── ansible.cfg                   # Global Ansible settings
+├── inventories/
+│   └── production/
+│       ├── hosts                 # Inventory file
+│       └── group_vars/
+│           ├── all.yml           # Global variables
+│           └── kamal_servers.yml # Kamal server specific variables
+├── roles/
+│   ├── common/                   # Basic system configuration
+│   ├── docker/                   # Docker installation and configuration
+│   ├── kamal/                    # Kamal environment setup
+│   ├── firewall/                 # UFW firewall configuration
+│   └── monitoring/               # Optional Node Exporter setup
+├── playbooks/
+│   ├── site.yml                  # Main playbook
+│   └── verify.yml                # Verification playbook
+├── files/
+│   └── ssh_keys/                 # Directory for SSH keys
+│       └── deploy_key.pub
+└── README.md                     # Documentation
 ```
+
+## Features
+
+- **Modular Design**: Each component is organized into separate roles for easy customization.
+- **Security-Focused**: Secure SSH configuration, minimal firewall rules, and fail2ban setup.
+- **Docker Optimization**: Properly configured Docker daemon with performance tuning.
+- **Kamal 2 Ready**: Server configured specifically for Kamal 2 deployment requirements.
+- **Monitoring**: Optional Node Exporter setup for Prometheus monitoring.
 
 ## Prerequisites
 
-1. Ansible installed on your local machine
-2. SSH access to the target server
-3. A user on the server with sudo permissions
+1. Ansible installed on your local machine:
+   ```bash
+   pip install ansible
+   ```
 
-## How to Use
+2. SSH access to your target Ubuntu 22.04 (or newer) server with a user that has sudo privileges.
 
-### 1. Preparation
+## Installation
 
 1. Clone this repository:
    ```bash
-   git clone [REPOSITORY_URL]
-   cd kamal-ansible
+   git clone <repository-url>
+   cd ansible
    ```
 
-2. Create the directory for SSH keys:
+2. Create your deployment SSH key if you don't already have one:
    ```bash
-   mkdir -p ssh_keys
+   ssh-keygen -t ed25519 -C "kamal-deploy-key" -f files/ssh_keys/deploy_key
    ```
 
-3. (Optional) Add your deployment public key:
-   ```bash
-   cp /path/to/your/key.pub ssh_keys/deploy_key.pub
+3. Configure your inventory by editing `inventories/production/hosts`:
+   ```ini
+   [kamal_servers]
+   app-server ansible_host=<YOUR_SERVER_IP> ansible_user=<YOUR_USERNAME>
    ```
 
-4. Edit either the `inventory.ini` file or `inventory.yml` file (choose one):
+4. Customize variables if needed:
+   - Global variables: `inventories/production/group_vars/all.yml`
+   - Kamal server settings: `inventories/production/group_vars/kamal_servers.yml`
 
-   **For INI format (inventory.ini)**:
-   - Replace `YOUR_IP_HERE` with your server's IP address
-   - Replace `YOUR_USERNAME` with your username on the server
-   - You can define multiple servers, each on its own line
+## Usage
 
-   **For YAML format (inventory.yml)**:
-   - This format allows cleaner organization of variables across multiple lines
-   - Replace the placeholder values with your actual server information
-   - You can easily define variables at both host and group levels
+### Running the Full Setup
 
-### 2. Running the Playbook
-
-Using the INI format inventory:
-```bash
-ansible-playbook -i inventory.ini kamal_server_setup.yml --ask-become-pass
-```
-
-Or using the YAML format inventory:
-```bash
-ansible-playbook -i inventory.yml kamal_server_setup.yml --ask-become-pass
-```
-
-If you're using an SSH key for authentication:
+To configure your server for Kamal 2 deployments:
 
 ```bash
-ansible-playbook -i inventory.ini kamal_server_setup.yml --ask-become-pass --private-key=/path/to/your/private_key
+ansible-playbook playbooks/site.yml -i inventories/production/hosts --ask-become-pass
 ```
 
-## What this Playbook Configures
+### Running Specific Roles
 
-- Basic system packages
-- Docker Engine and Docker Compose
-- Firewall (UFW) with rules for HTTP, HTTPS, and SSH
-- Fail2ban for protection against brute force attempts
-- Swap configuration (2GB)
-- User configuration for Docker usage
-- Applications directory
-- Python dependencies required for Kamal
+You can use tags to run specific parts of the configuration:
 
-## Using with Kamal
+```bash
+# Only setup Docker
+ansible-playbook playbooks/site.yml -i inventories/production/hosts --tags docker --ask-become-pass
 
-After successfully running this playbook, your server will be ready to receive deployments with Kamal 2.
+# Setup firewall and security configurations
+ansible-playbook playbooks/site.yml -i inventories/production/hosts --tags firewall,common --ask-become-pass
+```
 
-To configure a Rails project for deployment with Kamal:
+### Verification
 
-1. Install the Kamal gem in your project:
-   ```ruby
-   # Gemfile
-   gem "kamal", "~> 2.0"
-   ```
+After running the playbook, verify that your server is properly configured:
 
-2. Initialize Kamal configuration:
-   ```bash
-   bundle exec kamal init
-   ```
+```bash
+ansible-playbook playbooks/verify.yml -i inventories/production/hosts
+```
 
-3. Edit the generated `config/deploy.yml` file to point to the server you've configured.
+## Configuration Options
 
-4. Deploy your application:
-   ```bash
-   bundle exec kamal setup
-   bundle exec kamal deploy
-   ```
+### Docker Configuration
 
-## Customization
+Docker daemon settings can be customized in `roles/docker/defaults/main.yml` or overridden in your inventory group_vars.
 
-You can customize this playbook by editing the `kamal_server_setup.yml` file:
+### Firewall Rules
 
-- Change `docker_compose_version` to use a specific version of Docker Compose
-- Modify `architecture` if you need to specify a different architecture (default detects automatically)
-- Configure swap settings with the following variables:
-  - `configure_swap`: Set to `false` to skip swap configuration
-  - `swap_size_mb`: Set the swap file size in MB
-  - `swap_file_path`: Specify a custom location for the swap file
-- Add or remove packages from the `basic dependencies` list
-- Modify firewall rules as needed
-
-### Architecture Support
-
-This playbook supports different architectures:
-- ARM (arm64/aarch64): For Raspberry Pi, AWS Graviton, and other ARM-based servers
-- x86_64/AMD64: For traditional servers
-
-The playbook will try to detect the architecture automatically, but you can override it in the inventory file by setting the `architecture` variable.
+By default, only SSH (port 22), HTTP (port 80), and HTTPS (port 443) are allowed. Customize this in `roles/firewall/defaults/main.yml` or your inventory group_vars.
 
 ### Swap Configuration
 
-If your VM already has swap configured or you don't want to use swap, you can disable swap configuration by setting `configure_swap=false` in your inventory file.
+Swap settings can be adjusted in `roles/kamal/defaults/main.yml` or your inventory:
 
-You can also customize:
-- The size of the swap file with the `swap_size_mb` variable (default is 2048MB = 2GB)
-- The location of the swap file with the `swap_file_path` variable (default is /swapfile)
+```yaml
+configure_swap: true     # Set to false to disable swap configuration
+swap_size_mb: 2048       # Swap size in MB
+swap_file_path: /swapfile # Path for the swap file
+```
+
+### Monitoring
+
+Node Exporter is disabled by default. Enable it by setting `monitoring_enabled: true` in your inventory.
+
+## Using with Kamal 2
+
+After running this playbook, your server will be ready to receive deployments with Kamal 2.
+
+1. In your application project, install Kamal:
+   ```bash
+   gem install kamal
+   # Or add to Gemfile: gem "kamal", "~> 2.0"
+   ```
+
+2. Initialize Kamal in your project:
+   ```bash
+   kamal init
+   ```
+
+3. Configure your `config/deploy.yml` to use the server you've set up:
+   ```yaml
+   service: your_app_name
+   image: your_image_name
+
+   servers:
+     web:
+       - 1.2.3.4  # Your server IP
+   
+   registry:
+     username: your_username
+     password:
+       - KAMAL_REGISTRY_PASSWORD
+   ```
+
+4. Deploy your application:
+   ```bash
+   kamal setup
+   kamal deploy
+   ```
+
+## Security Considerations
+
+This playbook implements several security measures:
+- SSH root login disabled
+- Password authentication disabled
+- Public key authentication enforced
+- Fail2ban protection against brute force attacks
+- Minimal firewall rules with UFW
+- Secure Docker daemon configuration
+
+## Advanced Usage
+
+### Adding Multiple Servers
+
+Edit your inventory to add multiple servers:
+
+```ini
+[kamal_servers]
+app-server-1 ansible_host=1.2.3.4 ansible_user=ubuntu
+app-server-2 ansible_host=5.6.7.8 ansible_user=ubuntu
+```
+
+### Architecture Support
+
+This playbook supports different CPU architectures:
+- ARM (arm64/aarch64): For Raspberry Pi, AWS Graviton, etc.
+- x86_64/AMD64: For traditional servers
+
+The architecture is detected automatically, but can be overridden in your inventory.
+
+## Troubleshooting
+
+If you encounter issues:
+
+1. Check if Docker is running:
+   ```bash
+   sudo systemctl status docker
+   ```
+
+2. Verify the firewall rules:
+   ```bash
+   sudo ufw status
+   ```
+
+3. Test SSH access with your deploy key:
+   ```bash
+   ssh -i files/ssh_keys/deploy_key <user>@<server>
+   ```
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

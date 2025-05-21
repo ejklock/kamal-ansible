@@ -1,0 +1,81 @@
+---
+# Docker role tasks
+
+- name: Install Docker prerequisites
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+    state: present
+
+- name: Add Docker GPG key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Determine architecture
+  set_fact:
+    architecture: "{{ 'arm64' if ansible_architecture in ['aarch64', 'arm64'] else 'amd64' }}"
+
+- name: Add Docker repository
+  apt_repository:
+    repo: "deb [arch={{ architecture }}] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+    filename: docker
+
+- name: Install Docker packages
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present
+  notify: restart docker
+
+- name: Install Docker Compose plugin
+  get_url:
+    url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-{{ architecture }}"
+    dest: /usr/local/bin/docker-compose
+    mode: "0755"
+  register: docker_compose_download
+  ignore_errors: yes
+
+- name: Install Docker Compose (fallback for ARM)
+  get_url:
+    url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-{{ architecture | regex_replace('arm.*', 'aarch64') }}"
+    dest: /usr/local/bin/docker-compose
+    mode: "0755"
+  when:
+    - docker_compose_download is failed
+    - architecture is match("arm.*")
+
+- name: Create docker-compose symbolic link
+  file:
+    src: /usr/local/bin/docker-compose
+    dest: /usr/bin/docker-compose
+    state: link
+    force: yes
+
+- name: Configure Docker daemon
+  template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    mode: 0644
+  notify: restart docker
+
+- name: Ensure Docker service is started and enabled
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Add users to docker group
+  user:
+    name: "{{ item }}"
+    groups: docker
+    append: yes
+  with_items: "{{ docker_users }}"
+  when: docker_users | length > 0

@@ -1,0 +1,17 @@
+---
+# Default values for firewall role
+
+# Default SSH port
+ssh_port: 22
+
+# TCP ports to allow
+firewall_allowed_tcp_ports:
+  - "{{ ssh_port }}"
+  - 80
+  - 443
+
+# UDP ports to allow
+firewall_allowed_udp_ports: []
+
+# Additional UFW rules
+firewall_additional_rules: []

@@ -1,0 +1,20 @@
+---
+# Default values for docker role
+
+# Docker version
+docker_compose_version: "2.24.5"
+
+# Users to add to docker group
+docker_users: []
+
+# Docker daemon configuration
+docker_daemon_config:
+  log-driver: "json-file"
+  log-opts:
+    max-size: "100m"
+    max-file: "3"
+  storage-driver: "overlay2"
+  experimental: false
+  ipv6: false
+  iptables: true
+  live-restore: true

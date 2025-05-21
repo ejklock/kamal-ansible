@@ -1,0 +1,32 @@
+---
+# Global variables for all hosts
+
+# Timezone and locale settings
+timezone: UTC
+locale: en_US.UTF-8
+
+# Common packages to install on all hosts
+common_packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - python3-pip
+  - git
+  - unzip
+  - vim
+  - htop
+  - net-tools
+  - tmux
+
+# SSH settings
+ssh_port: 22
+ssh_permit_root_login: "no"
+ssh_password_authentication: "no"
+ssh_pubkey_authentication: "yes"
+
+# Security settings
+security_autoupdate_enabled: true
+security_autoupdate_mail_to: ""
+security_fail2ban_enabled: true

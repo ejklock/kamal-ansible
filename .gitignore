@@ -1,0 +1,78 @@
+# Ansible specific
+*.retry
+*.log
+.ansible/
+
+# SSH Keys - NEVER commit private keys!
+files/ssh_keys/*
+!files/ssh_keys/.gitkeep
+
+# Inventory files with sensitive data (optional - uncomment if needed)
+# inventories/production/hosts
+# inventories/staging/hosts
+
+# Environment specific variable files (optional - uncomment if needed)
+# inventories/*/group_vars/vault.yml
+# inventories/*/host_vars/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+
+# Python bytecode (if using custom modules)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Terraform (if mixing with Terraform)
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfplan
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Local development overrides
+local.yml
+override.yml
+development.yml
+
+# Vault password files
+.vault_pass
+vault_password_file
+.vault-password
+
+# Generated documentation
+docs/_build/
+
+# IDE and editor directories
+.vagrant/
+.kitchen/

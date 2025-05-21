@@ -1,0 +1,110 @@
+---
+# Kamal role tasks
+
+# Set up deployment user
+- name: Ensure deploy user has proper permissions
+  user:
+    name: "{{ deploy_user }}"
+    shell: /bin/bash
+    create_home: yes
+  when: deploy_user != "root"
+
+- name: Ensure .ssh directory exists
+  file:
+    path: "{{ deploy_user_home }}/.ssh"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0700"
+  when: deploy_user != "root"
+
+- name: Configure SSH keys for deployment (if key is provided)
+  authorized_key:
+    user: "{{ deploy_user }}"
+    state: present
+    key: "{{ lookup('file', 'files/ssh_keys/deploy_key.pub') }}"
+  when:
+    - deploy_user != "root"
+    - lookup('file', 'files/ssh_keys/deploy_key.pub', errors='ignore')
+
+- name: Create applications directory
+  file:
+    path: "{{ deploy_apps_dir }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0755"
+  when: deploy_user != "root"
+
+# Python dependencies for Kamal (used for Docker API)
+- name: Install Python dependencies for Kamal
+  pip:
+    name:
+      - docker
+      - pyOpenSSL
+    state: present
+
+# System tuning for optimal container performance
+- name: Set kernel parameters for optimal Docker performance
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  with_dict: "{{ sysctl_config }}"
+
+# Configure swap
+- name: Configure swap
+  block:
+    - name: Check if swap file exists
+      stat:
+        path: "{{ swap_file_path }}"
+      register: swap_file_check
+
+    - name: Create swap file
+      command: dd if=/dev/zero of={{ swap_file_path }} bs=1M count={{ swap_size_mb }}
+      when: not swap_file_check.stat.exists
+
+    - name: Set swap file permissions
+      file:
+        path: "{{ swap_file_path }}"
+        mode: "0600"
+      when: not swap_file_check.stat.exists
+
+    - name: Format swap file
+      command: mkswap {{ swap_file_path }}
+      when: not swap_file_check.stat.exists
+
+    - name: Enable swap
+      command: swapon {{ swap_file_path }}
+      when: not swap_file_check.stat.exists
+
+    - name: Add swap to fstab
+      lineinfile:
+        path: /etc/fstab
+        line: "{{ swap_file_path }} none swap sw 0 0"
+        state: present
+      when: not swap_file_check.stat.exists
+  when: configure_swap | bool
+
+# Set up directory structure for Kamal deployments
+- name: Create .kamal directory
+  file:
+    path: "{{ deploy_user_home }}/.kamal"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0755"
+  when: deploy_user != "root"
+
+# Ensure SSH config file exists for Kamal to use
+- name: Create SSH config file
+  file:
+    path: "{{ deploy_user_home }}/.ssh/config"
+    state: touch
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
+  when: deploy_user != "root"

@@ -1,0 +1,66 @@
+---
+# Firewall role tasks
+
+- name: Install UFW
+  apt:
+    name: ufw
+    state: present
+
+- name: Configure SSH port for firewall
+  template:
+    src: openssh-server.j2
+    dest: /etc/ufw/applications.d/openssh-server
+    mode: 0644
+  notify: reload ufw
+
+- name: Configure UFW defaults
+  ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  with_items:
+    - { direction: "incoming", policy: "deny" }
+    - { direction: "outgoing", policy: "allow" }
+  notify: reload ufw
+
+- name: Allow SSH access
+  ufw:
+    rule: allow
+    name: OpenSSH
+  notify: reload ufw
+
+- name: Allow specified TCP ports
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  with_items: "{{ firewall_allowed_tcp_ports }}"
+  notify: reload ufw
+
+- name: Allow specified UDP ports
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: udp
+  with_items: "{{ firewall_allowed_udp_ports }}"
+  when: firewall_allowed_udp_ports | length > 0
+  notify: reload ufw
+
+- name: Add additional firewall rules
+  ufw:
+    rule: "{{ item.rule | default('allow') }}"
+    port: "{{ item.port | default(omit) }}"
+    proto: "{{ item.proto | default(omit) }}"
+    src: "{{ item.src | default(omit) }}"
+    dest: "{{ item.dest | default(omit) }}"
+    from_port: "{{ item.from_port | default(omit) }}"
+    to_port: "{{ item.to_port | default(omit) }}"
+    interface: "{{ item.interface | default(omit) }}"
+    direction: "{{ item.direction | default(omit) }}"
+    route: "{{ item.route | default(omit) }}"
+  with_items: "{{ firewall_additional_rules }}"
+  when: firewall_additional_rules | length > 0
+  notify: reload ufw
+
+- name: Enable UFW
+  ufw:
+    state: enabled

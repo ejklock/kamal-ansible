@@ -1,0 +1,19 @@
+---
+# site.yml - Main playbook for configuring Kamal 2 servers
+
+- name: Apply common configuration to all servers
+  hosts: all
+  tags:
+    - common
+  roles:
+    - common
+
+- name: Configure servers for deployment with Kamal 2
+  hosts: kamal_servers
+  tags:
+    - kamal
+  roles:
+    - docker
+    - firewall
+    - kamal
+    - { role: monitoring, when: monitoring_enabled | default(false) }
