@@ -1,0 +1,12 @@
+# roles/kamal/templates/kamal-sudo.j2
+# Minimal sudo permissions for Kamal deployment user
+# This allows Kamal to manage Docker containers and services without full sudo access
+
+{{ kamal_user }} ALL=(root) NOPASSWD: /usr/bin/docker, /usr/bin/systemctl start docker, /usr/bin/systemctl stop docker, /usr/bin/systemctl restart docker, /usr/bin/systemctl status docker
+{{ kamal_user }} ALL=(root) NOPASSWD: /usr/bin/systemctl daemon-reload
+{{ kamal_user }} ALL=(root) NOPASSWD: /usr/local/bin/docker-compose, /usr/bin/docker-compose
+{{ kamal_user }} ALL=(root) NOPASSWD: /bin/mkdir -p /var/lib/docker/*, /bin/chown {{ kamal_user }}\:{{ kamal_user }} /var/lib/docker/*
+{{ kamal_user }} ALL=(root) NOPASSWD: /bin/systemctl reload nginx, /bin/systemctl restart nginx
+
+# Deny dangerous commands
+{{ kamal_user }} ALL=(root) !/bin/su, !/bin/bash, !/bin/sh, !/usr/bin/passwd, !/usr/bin/visudo

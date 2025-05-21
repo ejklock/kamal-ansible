@@ -1,15 +1,20 @@
+# inventories/production/group_vars/kamal_servers.yml - Updated
 ---
-# Variables specific to Kamal servers
+# Kamal deployment user configuration (replaces deploy_user)
+kamal_user: "kamal"
+kamal_user_home: "/home/{{ kamal_user }}"
+kamal_apps_dir: "{{ kamal_user_home }}/apps"
 
-# Deployment user configuration
-deploy_user: "{{ ansible_user }}"
-deploy_user_home: "/home/{{ deploy_user }}"
-deploy_apps_dir: "{{ deploy_user_home }}/apps"
+# Kamal CLI settings
+install_kamal_cli: true
+kamal_version: "2.0.0"
+create_kamal_example: true
 
 # Docker configuration
 docker_compose_version: "2.24.5"
 docker_users:
-  - "{{ deploy_user }}"
+  - "{{ kamal_user }}" # Add kamal user to docker group
+
 docker_daemon_config:
   log-driver: "json-file"
   log-opts:
@@ -20,6 +25,11 @@ docker_daemon_config:
   ipv6: false
   iptables: true
   live-restore: true
+  default-address-pools:
+    - base: "172.17.0.0/12"
+      size: 24
+    - base: "192.168.0.0/16"
+      size: 24
 
 # Swap configuration
 configure_swap: true
@@ -29,10 +39,18 @@ swap_size_mb: 2048
 # Firewall configuration
 firewall_allowed_tcp_ports:
   - "{{ ssh_port }}"
-  - 80
-  - 443
+  - 80 # HTTP
+  - 443 # HTTPS
+  - 3000 # Common app port (customize as needed)
+
 firewall_allowed_udp_ports: []
-firewall_additional_rules: []
+
+firewall_additional_rules:
+  # Example: Allow specific IPs to access admin interfaces
+  # - rule: allow
+  #   port: 3001
+  #   proto: tcp
+  #   src: "192.168.1.0/24"
 
 # System settings for networking and performance
 sysctl_config:
@@ -47,3 +65,10 @@ sysctl_config:
 
 # Optional monitoring settings
 monitoring_enabled: false
+
+# Security settings for kamal user
+kamal_ssh_key_options: "no-port-forwarding,no-X11-forwarding,no-agent-forwarding"
+
+# Backup configuration (optional)
+backup_enabled: false
+backup_retention_days: 30

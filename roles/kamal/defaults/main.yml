@@ -1,10 +1,16 @@
+# roles/kamal/defaults/main.yml - Updated with dedicated user
 ---
-# Default values for kamal role
+# Kamal deployment user configuration
+kamal_user: "kamal"
+kamal_user_home: "/home/{{ kamal_user }}"
+kamal_apps_dir: "{{ kamal_user_home }}/apps"
 
-# Deployment user configuration
-deploy_user: "{{ ansible_user }}"
-deploy_user_home: "/home/{{ deploy_user }}"
-deploy_apps_dir: "{{ deploy_user_home }}/apps"
+# Kamal CLI installation
+install_kamal_cli: true
+kamal_version: "2.0.0" # Set to 'latest' for latest version
+
+# Create example configuration files
+create_kamal_example: true
 
 # System tuning parameters for optimized container performance
 sysctl_config:
@@ -21,3 +27,7 @@ sysctl_config:
 configure_swap: true
 swap_file_path: "/swapfile"
 swap_size_mb: 2048
+
+# Docker user configuration (will add kamal user to docker group)
+docker_users:
+  - "{{ kamal_user }}"

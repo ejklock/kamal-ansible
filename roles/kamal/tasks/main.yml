@@ -1,40 +1,93 @@
+# roles/kamal/tasks/main.yml - Versão melhorada com usuário dedicado
 ---
-# Kamal role tasks
+# Kamal role tasks with dedicated user
 
-# Set up deployment user
-- name: Ensure deploy user has proper permissions
+- name: Create dedicated kamal group
+  group:
+    name: "{{ kamal_user }}"
+    state: present
+    system: yes
+
+- name: Create dedicated kamal user
   user:
-    name: "{{ deploy_user }}"
+    name: "{{ kamal_user }}"
+    group: "{{ kamal_user }}"
+    groups: docker
     shell: /bin/bash
+    home: "{{ kamal_user_home }}"
     create_home: yes
-  when: deploy_user != "root"
+    system: no
+    comment: "Kamal deployment user"
+    password_lock: yes # Disable password login, SSH key only
+  register: kamal_user_created
 
-- name: Ensure .ssh directory exists
+- name: Set proper ownership for kamal user home directory
   file:
-    path: "{{ deploy_user_home }}/.ssh"
+    path: "{{ kamal_user_home }}"
+    owner: "{{ kamal_user }}"
+    group: "{{ kamal_user }}"
+    mode: "0755"
     state: directory
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
-    mode: "0700"
-  when: deploy_user != "root"
 
-- name: Configure SSH keys for deployment (if key is provided)
+- name: Create .ssh directory for kamal user
+  file:
+    path: "{{ kamal_user_home }}/.ssh"
+    state: directory
+    owner: "{{ kamal_user }}"
+    group: "{{ kamal_user }}"
+    mode: "0700"
+
+- name: Configure SSH keys for kamal user
   authorized_key:
-    user: "{{ deploy_user }}"
+    user: "{{ kamal_user }}"
     state: present
     key: "{{ lookup('file', 'files/ssh_keys/deploy_key.pub') }}"
-  when:
-    - deploy_user != "root"
-    - lookup('file', 'files/ssh_keys/deploy_key.pub', errors='ignore')
+    comment: "Kamal deployment key"
+    key_options: "no-port-forwarding,no-X11-forwarding,no-agent-forwarding"
+  when: lookup('file', 'files/ssh_keys/deploy_key.pub', errors='ignore')
+
+- name: Create SSH config file for kamal user
+  file:
+    path: "{{ kamal_user_home }}/.ssh/config"
+    state: touch
+    owner: "{{ kamal_user }}"
+    group: "{{ kamal_user }}"
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
 
 - name: Create applications directory
   file:
-    path: "{{ deploy_apps_dir }}"
+    path: "{{ kamal_apps_dir }}"
     state: directory
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
+    owner: "{{ kamal_user }}"
+    group: "{{ kamal_user }}"
     mode: "0755"
-  when: deploy_user != "root"
+
+- name: Create kamal configuration directory
+  file:
+    path: "{{ kamal_user_home }}/.kamal"
+    state: directory
+    owner: "{{ kamal_user }}"
+    group: "{{ kamal_user }}"
+    mode: "0755"
+
+- name: Create kamal logs directory
+  file:
+    path: "{{ kamal_user_home }}/logs"
+    state: directory
+    owner: "{{ kamal_user }}"
+    group: "{{ kamal_user }}"
+    mode: "0755"
+
+- name: Configure sudo access for kamal user (minimal permissions)
+  template:
+    src: kamal-sudo.j2
+    dest: /etc/sudoers.d/kamal-deploy
+    mode: "0440"
+    owner: root
+    group: root
+    validate: "visudo -cf %s"
 
 # System tuning for optimal container performance
 - name: Set kernel parameters for optimal Docker performance
@@ -79,24 +132,9 @@
       when: not swap_file_check.stat.exists
   when: configure_swap | bool
 
-# Set up directory structure for Kamal deployments
-- name: Create .kamal directory
-  file:
-    path: "{{ deploy_user_home }}/.kamal"
-    state: directory
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
-    mode: "0755"
-  when: deploy_user != "root"
-
-# Ensure SSH config file exists for Kamal to use
-- name: Create SSH config file
-  file:
-    path: "{{ deploy_user_home }}/.ssh/config"
-    state: touch
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
-    mode: "0600"
-    modification_time: preserve
-    access_time: preserve
-  when: deploy_user != "root"
+- name: Display kamal user setup information
+  debug:
+    msg:
+      - "Kamal deployment user created: {{ kamal_user }}"
+      - "Applications directory: {{ kamal_apps_dir }}"
+      - "SSH into server as: ssh {{ kamal_user }}@{{ ansible_host }}"

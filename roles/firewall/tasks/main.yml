@@ -1,5 +1,5 @@
 ---
-# Firewall role tasks
+# Firewall role tasks - Fixed version
 
 - name: Install UFW
   apt:
@@ -34,6 +34,10 @@
     port: "{{ item }}"
     proto: tcp
   with_items: "{{ firewall_allowed_tcp_ports }}"
+  when:
+    - firewall_allowed_tcp_ports is defined
+    - firewall_allowed_tcp_ports is not none
+    - firewall_allowed_tcp_ports | length > 0
   notify: reload ufw
 
 - name: Allow specified UDP ports
@@ -42,7 +46,10 @@
     port: "{{ item }}"
     proto: udp
   with_items: "{{ firewall_allowed_udp_ports }}"
-  when: firewall_allowed_udp_ports | length > 0
+  when:
+    - firewall_allowed_udp_ports is defined
+    - firewall_allowed_udp_ports is not none
+    - firewall_allowed_udp_ports | length > 0
   notify: reload ufw
 
 - name: Add additional firewall rules
@@ -58,7 +65,10 @@
     direction: "{{ item.direction | default(omit) }}"
     route: "{{ item.route | default(omit) }}"
   with_items: "{{ firewall_additional_rules }}"
-  when: firewall_additional_rules | length > 0
+  when:
+    - firewall_additional_rules is defined
+    - firewall_additional_rules is not none
+    - firewall_additional_rules | length > 0
   notify: reload ufw
 
 - name: Enable UFW

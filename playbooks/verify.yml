@@ -1,3 +1,4 @@
+# playbooks/verify.yml - Updated for dedicated kamal user
 ---
 # verify.yml - Playbook to verify server configuration for Kamal deployments
 
@@ -7,24 +8,53 @@
   gather_facts: true
 
   tasks:
-    - name: Check Docker access for deployment user
+    - name: Check if kamal user exists
+      getent:
+        database: passwd
+        key: "{{ kamal_user }}"
+      register: kamal_user_check
+      ignore_errors: true
+      tags: user
+
+    - name: Display kamal user status
+      debug:
+        msg: "Kamal user '{{ kamal_user }}' {{ 'exists' if kamal_user_check.ansible_facts.getent_passwd else 'does not exist' }}"
+      tags: user
+
+    - name: Check Docker access for kamal user
       command: docker ps
       register: docker_ps
       changed_when: false
       ignore_errors: true
+      become_user: "{{ kamal_user }}"
       tags: docker
 
-    - name: Display Docker status
+    - name: Display Docker status for kamal user
       debug:
-        msg: "Docker is {{ 'accessible and working correctly' if docker_ps.rc == 0 else 'not accessible or not working' }}"
+        msg: "Docker is {{ 'accessible and working correctly' if docker_ps.rc == 0 else 'not accessible or not working' }} for {{ kamal_user }} user"
       when: docker_ps.rc is defined
       tags: docker
+
+    - name: Check Kamal CLI installation
+      command: kamal --version
+      register: kamal_version_check
+      changed_when: false
+      ignore_errors: true
+      become_user: "{{ kamal_user }}"
+      tags: kamal
+
+    - name: Display Kamal CLI status
+      debug:
+        msg: "{{ kamal_version_check.stdout if kamal_version_check.rc == 0 else 'Kamal CLI is not installed or not accessible' }}"
+      when: kamal_version_check.rc is defined
+      tags: kamal
 
     - name: Check Docker Compose installation
       command: docker-compose --version
       register: docker_compose_version
       changed_when: false
       ignore_errors: true
+      become_user: "{{ kamal_user }}"
       tags: docker
 
     - name: Display Docker Compose status
@@ -47,31 +77,62 @@
       when: ufw_status.rc is defined
       tags: firewall
 
-    - name: Check deployment directory structure
+    - name: Check kamal user directory structure
       stat:
         path: "{{ item }}"
-      register: dir_check
+      register: kamal_dir_check
       loop:
-        - "{{ ansible_env.HOME }}/apps"
-        - "{{ ansible_env.HOME }}/.ssh"
+        - "{{ kamal_user_home }}"
+        - "{{ kamal_apps_dir }}"
+        - "{{ kamal_user_home }}/.ssh"
+        - "{{ kamal_user_home }}/.kamal"
+        - "{{ kamal_user_home }}/logs"
+      become_user: "{{ kamal_user }}"
       tags: structure
 
-    - name: Display directory structure status
+    - name: Display kamal directory structure status
       debug:
         msg: "Directory {{ item.item }} {{ 'exists' if item.stat.exists else 'does not exist' }}"
-      loop: "{{ dir_check.results }}"
+      loop: "{{ kamal_dir_check.results }}"
       tags: structure
 
-    - name: Check SSH key configuration
+    - name: Check SSH key configuration for kamal user
       stat:
-        path: "{{ ansible_env.HOME }}/.ssh/authorized_keys"
-      register: ssh_keys
+        path: "{{ kamal_user_home }}/.ssh/authorized_keys"
+      register: kamal_ssh_keys
+      become_user: "{{ kamal_user }}"
       tags: ssh
 
-    - name: Display SSH key status
+    - name: Display SSH key status for kamal user
       debug:
-        msg: "SSH authorized_keys file {{ 'exists' if ssh_keys.stat.exists else 'does not exist' }}"
+        msg: "SSH authorized_keys file {{ 'exists' if kamal_ssh_keys.stat.exists else 'does not exist' }} for {{ kamal_user }} user"
       tags: ssh
+
+    - name: Check kamal user sudo permissions
+      command: sudo -l -U {{ kamal_user }}
+      register: kamal_sudo_check
+      changed_when: false
+      ignore_errors: true
+      become: true
+      tags: permissions
+
+    - name: Display kamal sudo permissions
+      debug:
+        msg: "{{ kamal_sudo_check.stdout_lines if kamal_sudo_check.rc == 0 else 'No sudo permissions or error checking permissions' }}"
+      when: kamal_sudo_check.stdout_lines is defined
+      tags: permissions
+
+    - name: Check if kamal user is in docker group
+      command: groups {{ kamal_user }}
+      register: kamal_groups
+      changed_when: false
+      ignore_errors: true
+      tags: permissions
+
+    - name: Display kamal user groups
+      debug:
+        msg: "{{ kamal_user }} groups: {{ kamal_groups.stdout if kamal_groups.rc == 0 else 'Error getting groups' }}"
+      tags: permissions
 
     - name: Check system resources
       debug:
@@ -102,6 +163,7 @@
         - ssh
         - ufw
       ignore_errors: true
+      become: true
       tags: services
 
     - name: Display services status
@@ -111,13 +173,29 @@
       when: item.status is defined
       tags: services
 
+    - name: Test SSH connection as kamal user
+      local_action:
+        module: command
+        _raw_params: ssh -i ~/.ssh/kamal_deploy_key -o ConnectTimeout=5 -o StrictHostKeyChecking=no {{ kamal_user }}@{{ ansible_host }} "echo 'SSH connection successful'"
+      register: ssh_test
+      ignore_errors: true
+      tags: connectivity
+
+    - name: Display SSH connection test result
+      debug:
+        msg: "SSH connection as {{ kamal_user }}: {{ 'SUCCESS' if ssh_test.rc == 0 else 'FAILED - ' + ssh_test.stderr | default('Unknown error') }}"
+      tags: connectivity
+
     - name: Summary
       debug:
         msg:
           - "=== Kamal Deployment Server Verification Summary ==="
-          - "✓ Docker: {{ 'Working' if docker_ps.rc == 0 else 'Not working' }}"
+          - "✓ Kamal user: {{ 'Created' if kamal_user_check.ansible_facts.getent_passwd else 'Missing' }} ({{ kamal_user }})"
+          - "✓ Docker access: {{ 'Working' if docker_ps.rc == 0 else 'Not working' }}"
+          - "✓ Kamal CLI: {{ 'Installed' if kamal_version_check.rc == 0 else 'Not installed' }}"
           - "✓ UFW Firewall: {{ 'Active' if ufw_status.rc == 0 and 'Status: active' in ufw_status.stdout else 'Inactive or not configured' }}"
-          - "✓ Apps directory: {{ 'Present' if dir_check.results[0].stat.exists else 'Missing' }}"
-          - "✓ SSH directory: {{ 'Present' if dir_check.results[1].stat.exists else 'Missing' }}"
-          - "✓ Server is ready for Kamal deployments"
+          - "✓ Directory structure: {{ 'Complete' if kamal_dir_check.results | selectattr('stat.exists') | list | length == 5 else 'Incomplete' }}"
+          - "✓ SSH access: {{ 'Working' if ssh_test.rc == 0 else 'Not working' }}"
+          - "✓ Docker group membership: {{ 'Yes' if 'docker' in kamal_groups.stdout else 'No' }}"
+          - "✓ Server is {{ 'READY' if (docker_ps.rc == 0 and kamal_version_check.rc == 0 and ssh_test.rc == 0) else 'NOT READY' }} for Kamal deployments"
       tags: always
