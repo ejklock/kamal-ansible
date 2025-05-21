@@ -74,3 +74,17 @@
         src: 50unattended-upgrades.j2
         dest: /etc/apt/apt.conf.d/50unattended-upgrades
         mode: 0644
+
+- name: Configure SSH security settings
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+    backup: yes
+  with_items:
+    - { regexp: '^PermitRootLogin', line: 'PermitRootLogin {{ ssh_permit_root_login }}' }
+    - { regexp: '^PasswordAuthentication', line: 'PasswordAuthentication {{ ssh_password_authentication }}' }
+    - { regexp: '^PubkeyAuthentication', line: 'PubkeyAuthentication {{ ssh_pubkey_authentication }}' }
+    - { regexp: '^Port', line: 'Port {{ ssh_port }}' }
+  notify: restart ssh

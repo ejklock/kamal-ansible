@@ -1,0 +1,22 @@
+---
+# Prerequisites validation tasks
+
+- name: Check Ubuntu version
+  fail:
+    msg: "This playbook requires Ubuntu 22.04 or newer. Found {{ ansible_distribution }} {{ ansible_distribution_version }}"
+  when:
+    - ansible_distribution != "Ubuntu"
+    - ansible_distribution_version is version('22.04', '<')
+
+- name: Check available memory
+  fail:
+    msg: "Server needs at least 1GB RAM. Found {{ ansible_memtotal_mb }}MB"
+  when: ansible_memtotal_mb < 1024
+
+- name: Check available disk space
+  fail:
+    msg: "Server needs at least 10GB free disk space"
+  when: (ansible_mounts | selectattr('mount', 'equalto', '/') | map(attribute='size_available') | first | int // 1024 // 1024 // 1024) < 10
+
+- name: Check if server is reachable
+  ping:

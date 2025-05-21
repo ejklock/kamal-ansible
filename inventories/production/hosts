@@ -1,49 +1,7 @@
----
-# Variables specific to Kamal servers
+[kamal_servers]
+# Example servers - replace with your actual servers
+app-server-1 ansible_host=1.2.3.4 ansible_user=ubuntu
+app-server-2 ansible_host=5.6.7.8 ansible_user=ubuntu
 
-# Deployment user configuration
-deploy_user: "{{ ansible_user }}"
-deploy_user_home: "/home/{{ deploy_user }}"
-deploy_apps_dir: "{{ deploy_user_home }}/apps"
-
-# Docker configuration
-docker_compose_version: "2.24.5"
-docker_users:
-  - "{{ deploy_user }}"
-docker_daemon_config:
-  log-driver: "json-file"
-  log-opts:
-    max-size: "100m"
-    max-file: "3"
-  storage-driver: "overlay2"
-  experimental: false
-  ipv6: false
-  iptables: true
-  live-restore: true
-
-# Swap configuration
-configure_swap: true
-swap_file_path: "/swapfile"
-swap_size_mb: 2048
-
-# Firewall configuration
-firewall_allowed_tcp_ports:
-  - "{{ ssh_port }}"
-  - 80
-  - 443
-firewall_allowed_udp_ports: []
-firewall_additional_rules: []
-
-# System settings for networking and performance
-sysctl_config:
-  net.ipv4.tcp_fin_timeout: 15
-  net.ipv4.tcp_tw_reuse: 1
-  net.core.somaxconn: 65536
-  net.ipv4.ip_local_port_range: "1024 65535"
-  net.ipv4.tcp_max_syn_backlog: 65536
-  vm.overcommit_memory: 1
-  vm.swappiness: 10
-  fs.file-max: 2097152
-
-# Optional monitoring settings
-monitoring_enabled: false
+[kamal_servers:vars]
+ansible_python_interpreter=/usr/bin/python3
