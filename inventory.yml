@@ -1,0 +1,24 @@
+# inventory.yml
+---
+kamal_servers:
+  hosts:
+    kamal-server:
+      ansible_host: YOUR_IP_HERE
+      ansible_user: YOUR_USERNAME
+      architecture: arm64
+      # Uncomment and configure these if you want to override group vars for this host
+      # configure_swap: true
+      # swap_size_mb: 4096
+      # swap_file_path: /custom/swapfile
+
+    # Uncomment and adjust for additional servers
+    # x86-server:
+    #   ansible_host: YOUR_X86_IP_HERE
+    #   ansible_user: YOUR_USERNAME
+    #   architecture: amd64
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    configure_swap: true
+    swap_size_mb: 2048
+    swap_file_path: /swapfile
