@@ -1,0 +1,361 @@
+---
+# playbooks/security-check.yml
+# Simple security validation playbook to verify applied configurations
+
+- name: Security Configuration Validation
+  hosts: kamal_servers
+  gather_facts: true
+  vars:
+    security_checks: []
+
+  tasks:
+    - name: "SSH Security Checks"
+      block:
+        - name: Check SSH root login disabled
+          shell: sshd -T | grep -i "permitrootlogin no"
+          register: ssh_root_check
+          become: true
+          failed_when: false
+
+        - name: Check SSH password authentication disabled
+          shell: sshd -T | grep -i "passwordauthentication no"
+          register: ssh_password_check
+          become: true
+          failed_when: false
+
+        - name: Check SSH key authentication enabled
+          shell: sshd -T | grep -i "pubkeyauthentication yes"
+          register: ssh_key_check
+          become: true
+          failed_when: false
+
+        - name: SSH Security Results
+          debug:
+            msg:
+              - "SSH Root Login Disabled: {{ 'PASS' if ssh_root_check.rc == 0 else 'FAIL' }}"
+              - "SSH Password Auth Disabled: {{ 'PASS' if ssh_password_check.rc == 0 else 'FAIL' }}"
+              - "SSH Key Auth Enabled: {{ 'PASS' if ssh_key_check.rc == 0 else 'FAIL' }}"
+
+    - name: "Firewall Security Checks"
+      block:
+        - name: Check UFW firewall status
+          shell: 'ufw status | grep "Status: active"'
+          register: ufw_active_check
+          become: true
+          failed_when: false
+
+        - name: Check UFW default incoming policy
+          shell: 'ufw status verbose | grep "Default: deny (incoming)"'
+          register: ufw_incoming_check
+          become: true
+          failed_when: false
+
+        - name: Check UFW default outgoing policy
+          shell: 'ufw status verbose | grep "Default: allow (outgoing)"'
+          register: ufw_outgoing_check
+          become: true
+          failed_when: false
+
+        - name: Get UFW rules
+          shell: ufw status numbered
+          register: ufw_rules
+          become: true
+          failed_when: false
+
+        - name: Firewall Security Results
+          debug:
+            msg:
+              - "UFW Firewall Active: {{ 'PASS' if ufw_active_check.rc == 0 else 'FAIL' }}"
+              - "UFW Incoming Deny: {{ 'PASS' if ufw_incoming_check.rc == 0 else 'FAIL' }}"
+              - "UFW Outgoing Allow: {{ 'PASS' if ufw_outgoing_check.rc == 0 else 'FAIL' }}"
+              - "Active UFW Rules:"
+              - "{{ ufw_rules.stdout_lines }}"
+
+    - name: "User Security Checks"
+      block:
+        - name: Check kamal user exists
+          getent:
+            database: passwd
+            key: "{{ kamal_user }}"
+          register: kamal_user_exists
+          failed_when: false
+
+        - name: Check kamal user in docker group
+          shell: groups {{ kamal_user }} | grep docker
+          register: kamal_docker_group
+          failed_when: false
+
+        - name: Check kamal user home directory
+          stat:
+            path: "{{ kamal_user_home }}"
+          register: kamal_home_check
+
+        - name: Check kamal user SSH keys
+          stat:
+            path: "{{ kamal_user_home }}/.ssh/authorized_keys"
+          register: kamal_ssh_keys
+
+        - name: Check kamal user sudo permissions
+          shell: sudo -l -U {{ kamal_user }} | grep -E "(docker|systemctl)"
+          register: kamal_sudo_check
+          become: true
+          failed_when: false
+
+        - name: User Security Results
+          debug:
+            msg:
+              - "Kamal User Exists: {{ 'PASS' if kamal_user_exists.ansible_facts.getent_passwd else 'FAIL' }}"
+              - "Kamal User in Docker Group: {{ 'PASS' if kamal_docker_group.rc == 0 else 'FAIL' }}"
+              - "Kamal Home Directory: {{ 'PASS' if kamal_home_check.stat.exists else 'FAIL' }}"
+              - "SSH Keys Configured: {{ 'PASS' if kamal_ssh_keys.stat.exists else 'FAIL' }}"
+              - "Limited Sudo Access: {{ 'PASS' if kamal_sudo_check.rc == 0 else 'FAIL' }}"
+
+    - name: "Docker Security Checks"
+      block:
+        - name: Check Docker service running
+          systemd:
+            name: docker
+          register: docker_service_check
+          become: true
+
+        - name: Check Docker daemon configuration
+          stat:
+            path: /etc/docker/daemon.json
+          register: docker_config_check
+
+        - name: Check kamal user can access Docker
+          shell: docker ps
+          register: docker_access_check
+          become_user: "{{ kamal_user }}"
+          failed_when: false
+
+        - name: Check Docker socket permissions
+          stat:
+            path: /var/run/docker.sock
+          register: docker_socket_check
+
+        - name: Check Docker API not exposed publicly
+          shell: 'netstat -tuln | grep ":2375\|:2376"'
+          register: docker_api_check
+          failed_when: false
+
+        - name: Docker Security Results
+          debug:
+            msg:
+              - "Docker Service Running: {{ 'PASS' if docker_service_check.status.ActiveState == 'active' else 'FAIL' }}"
+              - "Docker Config Exists: {{ 'PASS' if docker_config_check.stat.exists else 'FAIL' }}"
+              - "Kamal Docker Access: {{ 'PASS' if docker_access_check.rc == 0 else 'FAIL' }}"
+              - "Docker API Not Public: {{ 'PASS' if docker_api_check.rc != 0 else 'FAIL - API may be exposed' }}"
+
+    - name: "System Security Checks"
+      block:
+        - name: Check fail2ban service
+          systemd:
+            name: fail2ban
+          register: fail2ban_check
+          become: true
+          failed_when: false
+
+        - name: Check fail2ban SSH jail
+          shell: fail2ban-client status sshd
+          register: fail2ban_ssh_check
+          become: true
+          failed_when: false
+
+        - name: Check automatic updates
+          stat:
+            path: /etc/apt/apt.conf.d/20auto-upgrades
+          register: auto_updates_check
+
+        - name: Check swap configuration
+          shell: swapon --show
+          register: swap_check
+          failed_when: false
+
+        - name: System Security Results
+          debug:
+            msg:
+              - "Fail2ban Active: {{ 'PASS' if fail2ban_check.status is defined and fail2ban_check.status.ActiveState == 'active' else 'FAIL' }}"
+              - "Fail2ban SSH Jail: {{ 'PASS' if fail2ban_ssh_check.rc == 0 else 'FAIL' }}"
+              - "Auto Updates Configured: {{ 'PASS' if auto_updates_check.stat.exists else 'FAIL' }}"
+              - "Swap Configured: {{ 'PASS' if swap_check.stdout else 'INFO - No swap' }}"
+
+    - name: "Additional Security Checks"
+      block:
+        - name: Check open ports
+          shell: netstat -tuln | grep LISTEN
+          register: open_ports_check
+          failed_when: false
+
+        - name: Check for weak permissions on sensitive files
+          shell: |
+            echo "=== Critical File Permissions ==="
+            ls -la /etc/passwd /etc/shadow /etc/sudoers 2>/dev/null || true
+            echo "=== SSH Config ==="
+            ls -la /etc/ssh/sshd_config 2>/dev/null || true
+            echo "=== Kamal User SSH ==="
+            ls -la {{ kamal_user_home }}/.ssh/ 2>/dev/null || true
+          register: file_permissions_check
+          become: true
+          failed_when: false
+
+        - name: Count SUID/SGID files
+          shell: find /usr /bin /sbin -perm /4000 -o -perm /2000 2>/dev/null | wc -l
+          register: suid_count_check
+          become: true
+          failed_when: false
+
+        - name: Additional Security Results
+          debug:
+            msg:
+              - "=== Open Ports ==="
+              - "{{ open_ports_check.stdout_lines }}"
+              - ""
+              - "=== File Permissions ==="
+              - "{{ file_permissions_check.stdout_lines }}"
+              - ""
+              - "SUID/SGID Files Count: {{ suid_count_check.stdout }} (should be < 50)"
+
+    - name: "Security Summary"
+      block:
+        - name: Calculate security scores and totals
+          set_fact:
+            ssh_score: "{{ (ssh_root_check.rc == 0) | int + (ssh_password_check.rc == 0) | int + (ssh_key_check.rc == 0) | int }}"
+            firewall_score: "{{ (ufw_active_check.rc == 0) | int + (ufw_incoming_check.rc == 0) | int + (ufw_outgoing_check.rc == 0) | int }}"
+            user_score: >-
+              {{ 
+                (kamal_user_exists.ansible_facts.getent_passwd != None) | int + 
+                (kamal_docker_group.rc == 0) | int + 
+                (kamal_home_check.stat.exists) | int + 
+                (kamal_ssh_keys.stat.exists) | int + 
+                (kamal_sudo_check.rc == 0) | int 
+              }}
+            docker_score: >-
+              {{ 
+                (docker_service_check.status.ActiveState == 'active') | int + 
+                (docker_config_check.stat.exists) | int + 
+                (docker_access_check.rc == 0) | int + 
+                (docker_api_check.rc != 0) | int 
+              }}
+            system_score: >-
+              {{ 
+                ((fail2ban_check.status is defined and fail2ban_check.status.ActiveState == 'active')) | int + 
+                (fail2ban_ssh_check.rc == 0) | int + 
+                (auto_updates_check.stat.exists) | int 
+              }}
+
+        - name: Calculate final security score
+          set_fact:
+            total_checks: 14
+            passed_checks: >-
+              {{ 
+                (ssh_score | int) + 
+                (firewall_score | int) + 
+                (user_score | int) + 
+                (docker_score | int) + 
+                (system_score | int) 
+              }}
+
+        - name: Calculate security percentage
+          set_fact:
+            security_score: "{{ ((passed_checks | int) * 100 / 14) | int }}"
+
+        - name: Determine security status
+          set_fact:
+            security_status: >-
+              {%- if security_score | int >= 85 -%}
+              READY FOR PRODUCTION
+              {%- elif security_score | int >= 70 -%}
+              NEEDS MINOR FIXES
+              {%- else -%}
+              REQUIRES ATTENTION
+              {%- endif -%}
+
+        - name: Display Security Assessment Summary
+          debug:
+            msg:
+              - "========================================================"
+              - "           SECURITY ASSESSMENT SUMMARY"
+              - "========================================================"
+              - ""
+              - "Server: {{ ansible_hostname }} ({{ ansible_default_ipv4.address }})"
+              - "Security Score: {{ security_score }}% ({{ security_status }})"
+              - ""
+              - "SSH Security ({{ ssh_score }}/3):"
+              - "  Root login disabled: {{ 'PASS' if ssh_root_check.rc == 0 else 'FAIL' }}"
+              - "  Password auth disabled: {{ 'PASS' if ssh_password_check.rc == 0 else 'FAIL' }}"
+              - "  Key auth enabled: {{ 'PASS' if ssh_key_check.rc == 0 else 'FAIL' }}"
+              - ""
+              - "Firewall ({{ firewall_score }}/3):"
+              - "  UFW active: {{ 'PASS' if ufw_active_check.rc == 0 else 'FAIL' }}"
+              - "  Incoming deny: {{ 'PASS' if ufw_incoming_check.rc == 0 else 'FAIL' }}"
+              - "  Outgoing allow: {{ 'PASS' if ufw_outgoing_check.rc == 0 else 'FAIL' }}"
+              - ""
+              - "User Configuration ({{ user_score }}/5):"
+              - "  Kamal user exists: {{ 'PASS' if kamal_user_exists.ansible_facts.getent_passwd else 'FAIL' }}"
+              - "  Docker group access: {{ 'PASS' if kamal_docker_group.rc == 0 else 'FAIL' }}"
+              - "  Home directory: {{ 'PASS' if kamal_home_check.stat.exists else 'FAIL' }}"
+              - "  SSH keys configured: {{ 'PASS' if kamal_ssh_keys.stat.exists else 'FAIL' }}"
+              - "  Limited sudo access: {{ 'PASS' if kamal_sudo_check.rc == 0 else 'FAIL' }}"
+              - ""
+              - "Docker ({{ docker_score }}/4):"
+              - "  Service running: {{ 'PASS' if docker_service_check.status.ActiveState == 'active' else 'FAIL' }}"
+              - "  Config exists: {{ 'PASS' if docker_config_check.stat.exists else 'FAIL' }}"
+              - "  User access working: {{ 'PASS' if docker_access_check.rc == 0 else 'FAIL' }}"
+              - "  API not public: {{ 'PASS' if docker_api_check.rc != 0 else 'FAIL' }}"
+              - ""
+              - "System Protection ({{ system_score }}/3):"
+              - "  Fail2ban active: {{ 'PASS' if (fail2ban_check.status is defined and fail2ban_check.status.ActiveState == 'active') else 'FAIL' }}"
+              - "  SSH jail configured: {{ 'PASS' if fail2ban_ssh_check.rc == 0 else 'FAIL' }}"
+              - "  Auto updates: {{ 'PASS' if auto_updates_check.stat.exists else 'FAIL' }}"
+              - ""
+              - "Status: {{ security_status }}"
+              - "========================================================"
+
+        - name: Save security results to file
+          copy:
+            content: |
+              # Security Check Report - {{ ansible_date_time.iso8601 }}
+              Server: {{ ansible_hostname }} ({{ ansible_default_ipv4.address }})
+              Security Score: {{ security_score }}%
+              Status: {{ security_status }}
+
+              ## Detailed Results
+
+              SSH Security ({{ ssh_score }}/3):
+              - Root Login Disabled: {{ 'PASS' if ssh_root_check.rc == 0 else 'FAIL' }}
+              - Password Auth Disabled: {{ 'PASS' if ssh_password_check.rc == 0 else 'FAIL' }}
+              - Key Auth Enabled: {{ 'PASS' if ssh_key_check.rc == 0 else 'FAIL' }}
+
+              Firewall Security ({{ firewall_score }}/3):
+              - UFW Active: {{ 'PASS' if ufw_active_check.rc == 0 else 'FAIL' }}
+              - Incoming Deny: {{ 'PASS' if ufw_incoming_check.rc == 0 else 'FAIL' }}
+              - Outgoing Allow: {{ 'PASS' if ufw_outgoing_check.rc == 0 else 'FAIL' }}
+
+              User Configuration ({{ user_score }}/5):
+              - Kamal User Exists: {{ 'PASS' if kamal_user_exists.ansible_facts.getent_passwd else 'FAIL' }}
+              - Docker Group Access: {{ 'PASS' if kamal_docker_group.rc == 0 else 'FAIL' }}
+              - Home Directory: {{ 'PASS' if kamal_home_check.stat.exists else 'FAIL' }}
+              - SSH Keys: {{ 'PASS' if kamal_ssh_keys.stat.exists else 'FAIL' }}
+              - Sudo Access: {{ 'PASS' if kamal_sudo_check.rc == 0 else 'FAIL' }}
+
+              Docker Security ({{ docker_score }}/4):
+              - Service Running: {{ 'PASS' if docker_service_check.status.ActiveState == 'active' else 'FAIL' }}
+              - Config Exists: {{ 'PASS' if docker_config_check.stat.exists else 'FAIL' }}
+              - User Access: {{ 'PASS' if docker_access_check.rc == 0 else 'FAIL' }}
+              - API Not Public: {{ 'PASS' if docker_api_check.rc != 0 else 'FAIL' }}
+
+              System Security ({{ system_score }}/3):
+              - Fail2ban Active: {{ 'PASS' if (fail2ban_check.status is defined and fail2ban_check.status.ActiveState == 'active') else 'FAIL' }}
+              - SSH Jail: {{ 'PASS' if fail2ban_ssh_check.rc == 0 else 'FAIL' }}
+              - Auto Updates: {{ 'PASS' if auto_updates_check.stat.exists else 'FAIL' }}
+
+              ## Summary
+              Total Checks: {{ total_checks }}
+              Passed: {{ passed_checks }}
+              Score: {{ security_score }}%
+              Status: {{ security_status }}
+            dest: "/tmp/security-check-{{ inventory_hostname }}-{{ ansible_date_time.epoch }}.txt"
+            mode: 0644
+          delegate_to: localhost
+          become: false
